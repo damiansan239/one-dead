@@ -1,14 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"one_dead/pkg/datastore"
-	"one_dead/pkg/game"
-	"one_dead/pkg/pubsub"
+	"one_dead/internal/datastore"
+	"one_dead/internal/game"
+	"one_dead/internal/pubsub"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
 	_ "github.com/gdamore/tcell/v2/encoding"
+	"github.com/gdamore/tcell/v2/terminfo"
 	"github.com/gliderlabs/ssh"
 )
 
@@ -71,22 +73,75 @@ func NewChatUI(s ssh.Session, player *datastore.Player, gameSession *game.Sessio
 	}, nil
 }
 
+func NewSessionScreen(s ssh.Session) (tcell.Screen, error) {
+	pi, ch, ok := s.Pty()
+	if !ok {
+		return nil, errors.New("no pty requested")
+	}
+	ti, err := terminfo.LookupTerminfo(pi.Term)
+	if err != nil {
+		return nil, err
+	}
+	screen, err := tcell.NewTerminfoScreenFromTtyTerminfo(&tty{
+		Session: s,
+		ch:      ch,
+		size:    pi.Window,
+	}, ti)
+	if err != nil {
+		return nil, err
+	}
+	return screen, nil
+}
+
 // Helper function to add system messages with timestamp
 func (ui *ChatUI) addSystem(msg Message) {
 	timestamp := msg.timestamp.Format("15:04:05")
-	ui.addMessage(fmt.Sprintf("[%s] %s", timestamp, msg.text), tcell.ColorGray)
+
+	if msg.parts != nil {
+		partsWithPrefix := append([]TextPart{
+			{
+				bold: false,
+				text: fmt.Sprintf("%s -!- ", timestamp),
+			},
+		}, msg.parts...)
+		ui.addStyledMessage(partsWithPrefix, tcell.ColorTurquoise, msg.timestamp)
+	} else {
+		ui.addMessage(fmt.Sprintf("%s -!- %s", timestamp, msg.text), tcell.ColorTurquoise)
+	}
 }
 
 // Helper function to add server messages
 func (ui *ChatUI) addServer(msg Message) {
 	timestamp := msg.timestamp.Format("15:04:05")
-	ui.addMessage(fmt.Sprintf("[%s] * %s", timestamp, msg.text), tcell.ColorLightGreen)
+
+	if msg.parts != nil {
+		partsWithPrefix := append([]TextPart{
+			{
+				bold: false,
+				text: fmt.Sprintf("%s -!- ", timestamp),
+			},
+		}, msg.parts...)
+		ui.addStyledMessage(partsWithPrefix, tcell.ColorLightGreen, msg.timestamp)
+	} else {
+		ui.addMessage(fmt.Sprintf("%s -!- %s", timestamp, msg.text), tcell.ColorLightGreen)
+	}
 }
 
 // Helper function to add error/warning messages
 func (ui *ChatUI) addWarning(msg Message) {
 	timestamp := msg.timestamp.Format("15:04:05")
-	ui.addMessage(fmt.Sprintf("[%s] ! %s", timestamp, msg.text), tcell.ColorOrange)
+
+	if msg.parts != nil {
+		partsWithPrefix := append([]TextPart{
+			{
+				bold: false,
+				text: fmt.Sprintf("%s ! ", timestamp),
+			},
+		}, msg.parts...)
+		ui.addStyledMessage(partsWithPrefix, tcell.ColorOrange, msg.timestamp)
+	} else {
+		ui.addMessage(fmt.Sprintf("%s ! %s", timestamp, msg.text), tcell.ColorOrange)
+	}
 }
 
 func (ui *ChatUI) addMessage(msg string, color tcell.Color) {
@@ -99,80 +154,11 @@ func (ui *ChatUI) addMessage(msg string, color tcell.Color) {
 
 // Add a new method for styled messages
 func (ui *ChatUI) addStyledMessage(parts []TextPart, color tcell.Color, timestamp time.Time) {
-	partsWithPrefix := append([]TextPart{
-		{
-			bold: false,
-			text: fmt.Sprintf("[%s] ", timestamp.Format("15:04:05")),
-		},
-	}, parts...)
 	ui.messages = append(ui.messages, Message{
+		parts:     parts,
 		color:     color,
-		timestamp: time.Now(),
-		parts:     partsWithPrefix,
+		timestamp: timestamp,
 	})
-}
-
-func (ui *ChatUI) drawTopBar() {
-	width, _ := ui.screen.Size()
-	topBarStyle := ui.currentStyle.Background(tcell.ColorNavy).Foreground(tcell.ColorWhite)
-
-	// Clear the top bar
-	for x := 0; x < width; x++ {
-		ui.screen.SetContent(x, 0, ' ', nil, topBarStyle)
-	}
-
-	tries := 4
-	currentDuration := time.Now().UTC().Format("15:04")
-
-	topBarText := fmt.Sprintf(
-		"One Dead: A strategic guessing game. Current Tries: %d. Current Duration: %s. Play at https://one-dead.web.app",
-		tries,
-		currentDuration,
-	)
-
-	// Draw first line of the top bar
-	for x, ch := range topBarText {
-		if x >= width {
-			break
-		}
-		ui.screen.SetContent(x, 0, ch, nil, topBarStyle)
-	}
-}
-
-func (ui *ChatUI) drawPromptBar() {
-	width, _ := ui.screen.Size()
-
-	// Draw input area with colored background and prompt
-	inputStyle := tcell.StyleDefault.
-		Background(tcell.ColorDarkBlue).
-		Foreground(tcell.ColorWhite)
-
-	promptStyle := tcell.StyleDefault.
-		Background(tcell.ColorDarkBlue).
-		Foreground(tcell.ColorLightGreen).
-		Bold(true)
-
-	// Draw input background
-	for x := 0; x < width; x++ {
-		ui.screen.SetContent(x, ui.inputStartY, ' ', nil, inputStyle)
-	}
-
-	// Draw prompt
-	prompt := ">> "
-	for x, ch := range prompt {
-		ui.screen.SetContent(x, ui.inputStartY, ch, nil, promptStyle)
-	}
-
-	// Draw input text
-	for x, ch := range ui.inputBuffer {
-		if x+len(prompt) >= width {
-			break
-		}
-		ui.screen.SetContent(x+len(prompt), ui.inputStartY, ch, nil, inputStyle)
-	}
-
-	// Position cursor after the prompt
-	ui.screen.ShowCursor(len(prompt)+len(ui.inputBuffer), ui.inputStartY)
 }
 
 func (ui *ChatUI) draw() {

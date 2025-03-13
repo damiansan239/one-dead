@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
-	"one_dead/pkg/datastore"
-	"one_dead/pkg/game"
-	"os"
+	"one_dead/internal/datastore"
+	"one_dead/internal/game"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -16,7 +15,7 @@ func (ui *ChatUI) Run() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
-	// Create a channel for the ticker
+	// Update the screen at regular intervals
 	go func() {
 		for range ticker.C {
 			ui.draw()
@@ -24,6 +23,7 @@ func (ui *ChatUI) Run() {
 		}
 	}()
 
+	// Subscribe to chat messages
 	go func() {
 		gameC := ui.gameSession.Events.Subscribe()
 		defer ui.gameSession.Events.Close(gameC)
@@ -43,7 +43,7 @@ func (ui *ChatUI) Run() {
 
 	ui.draw()
 	ui.screen.Show()
-	go simulateConnection(ui)
+	go drawMOTD(ui)
 
 	for {
 		ui.draw()
@@ -56,7 +56,6 @@ func (ui *ChatUI) Run() {
 			switch ev.Key() {
 			case tcell.KeyCtrlC:
 				ui.screen.Fini()
-				os.Exit(0)
 			case tcell.KeyEnter:
 				handleEnter(ui)
 			case tcell.KeyBackspace, tcell.KeyBackspace2:
@@ -112,14 +111,24 @@ func onGameEnd(ui *ChatUI, message *game.SessionMessage) {
 	}
 
 	hasWon := ui.gameSession.Winner.Name == ui.player.Name
-	playerDB.SaveGame(&datastore.Game{
-		Id:       id,
-		PlayerId: ui.player.Id,
-		Tries:    len(ui.gameSession.Tries),
+
+	players := []*datastore.Player{}
+	for _, p := range ui.gameSession.Players {
+		players = append(players, &datastore.Player{
+			Name: p.Name,
+		})
+	}
+
+	server.Datastore.SaveGame(&datastore.Game{
 		Duration: 5,
-		Date:     time.Now(),
+		Id:       id,
 		Won:      hasWon,
+		Players:  players,
+		Date:     time.Now(),
+		Tries:    len(ui.gameSession.Tries),
 	})
+
+	server.RemoveSession(ui.gameSession.Id)
 }
 
 func handleScrollUp(ui *ChatUI) {

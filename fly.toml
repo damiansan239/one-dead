@@ -1,0 +1,27 @@
+# fly.toml app configuration file generated for one-dead on 2025-03-13T12:45:27+01:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'one-dead'
+primary_region = 'lax'
+
+[build]
+  [build.args]
+    GO_VERSION = '1.19'
+
+[env]
+  PORT = '8080'
+
+[http_service]
+  internal_port = 2222
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1

@@ -3,54 +3,68 @@ package main
 import (
 	"fmt"
 	"log"
-	"one_dead/pkg/datastore"
+	"one_dead/internal/datastore"
+	"one_dead/internal/game"
 
 	_ "github.com/gdamore/tcell/v2/encoding"
 	"github.com/gliderlabs/ssh"
-	gonanoid "github.com/matoous/go-nanoid/v2"
 )
 
-var lobby *Lobby = NewLobby()
-var playerDB *datastore.PlayerDB
+var server *Server
 
 func init() {
-	var err error
-	playerDB, err = datastore.NewPlayerDB("players.db")
+	db, err := datastore.NewDatastore("players.db")
 	if err != nil {
-		log.Fatalf("Failed to create player database: %v", err)
+		fmt.Printf("Failed to create player database: %v", err)
 	}
+
+	lobby := NewLobby()
+	server = NewServer(db, lobby)
 }
 
 func main() {
 	ssh.Handle(func(sess ssh.Session) {
+		server.IncrementUserCount()
+
 		// fetch player info
-		player, err := playerDB.GetByName(sess.User())
+		player, err := server.Datastore.GetByName(sess.User())
 
 		if err != nil || player == nil {
 			fmt.Println("Creating new player")
 
-			id, err := gonanoid.New()
+			player, err = server.Datastore.CreateNewPlayer(sess.User())
 			if err != nil {
-				log.Fatalf("Failed to generate player ID: %v", err)
+				fmt.Printf("Failed to create new player: %v", err)
 			}
-
-			player = &datastore.Player{
-				Id:   id,
-				Name: sess.User(),
-			}
-
-			playerDB.Create(player)
 		}
 
-		gameSession := lobby.GetFreeSession(player)
+		gameSession := server.Lobby.GetFreeSession(player)
+		server.AddSession(gameSession)
+
+		go func() {
+			<-sess.Context().Done()
+			server.DecrementUserCount()
+			if gameSession.Status == game.PENDING {
+				server.RemoveSession(gameSession.Id)
+				server.Lobby.AddSession(gameSession)
+			}
+
+			log.Println("connection closed")
+		}()
 
 		ui, err := NewChatUI(sess, player, gameSession)
 		if err != nil {
-			log.Fatalf("Failed to create UI: %v", err)
+			fmt.Printf("Failed to create UI: %v", err)
 		}
 
 		ui.Run()
 	})
 	fmt.Println("Starting server on port 2222...")
-	log.Fatal(ssh.ListenAndServe(":2222", nil))
+
+	opts := []ssh.Option{}
+	// if true {
+	// 	opts = append(opts, ssh.HostKeyFile("/home/yungwarlock/.ssh/id_rsa"))
+	// }
+
+	log.Fatal(ssh.ListenAndServe(":2222", nil, opts...))
 }

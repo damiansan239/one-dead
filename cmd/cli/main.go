@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"one_dead/pkg/game"
+	"one_dead/internal/game"
 )
 
 // Greeting

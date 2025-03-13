@@ -1,7 +1,7 @@
 package game
 
 import (
-	"one_dead/pkg/pubsub"
+	"one_dead/internal/pubsub"
 	"time"
 )
 

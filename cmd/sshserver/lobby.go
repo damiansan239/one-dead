@@ -1,8 +1,8 @@
 package main
 
 import (
-	"one_dead/pkg/datastore"
-	"one_dead/pkg/game"
+	"one_dead/internal/datastore"
+	"one_dead/internal/game"
 	"sync"
 )
 

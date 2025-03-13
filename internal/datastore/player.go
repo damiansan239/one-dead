@@ -8,10 +8,10 @@ import (
 )
 
 // Save stores a player in the database
-func (pdb *PlayerDB) Save(player *Player) error {
-	_, err := pdb.db.Exec(
-		"INSERT OR REPLACE INTO players (id, name) VALUES (?, ?)",
-		player.Id, player.Name,
+func (d *Datastore) Save(player *Player) error {
+	_, err := d.db.Exec(
+		"INSERT OR REPLACE INTO players (name) VALUES (?)",
+		player.Name,
 	)
 	if err != nil {
 		return fmt.Errorf("error saving player: %v", err)
@@ -20,24 +20,27 @@ func (pdb *PlayerDB) Save(player *Player) error {
 }
 
 // Create new player
-func (pdb *PlayerDB) Create(player *Player) error {
-	_, err := pdb.db.Exec(
-		"INSERT INTO players (id, name) VALUES (?, ?)",
-		player.Id, player.Name,
+func (d *Datastore) CreateNewPlayer(userName string) (*Player, error) {
+	_, err := d.db.Exec(
+		"INSERT INTO players (name) VALUES (?)",
+		userName,
 	)
+
 	if err != nil {
-		return fmt.Errorf("error creating player: %v", err)
+		return nil, fmt.Errorf("error creating player: %v", err)
 	}
-	return nil
+	return &Player{
+		Name: userName,
+	}, nil
 }
 
 // GetByName retrieves a player by their name
-func (pdb *PlayerDB) GetByName(name string) (*Player, error) {
+func (d *Datastore) GetByName(name string) (*Player, error) {
 	player := &Player{}
-	err := pdb.db.QueryRow(
-		"SELECT id, name FROM players WHERE name = ?",
+	err := d.db.QueryRow(
+		"SELECT name FROM players WHERE name = ?",
 		name,
-	).Scan(&player.Id, &player.Name)
+	).Scan(&player.Name)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -51,12 +54,12 @@ func (pdb *PlayerDB) GetByName(name string) (*Player, error) {
 }
 
 // GetByID retrieves a player by their ID
-func (pdb *PlayerDB) GetByID(id string) (*Player, error) {
+func (d *Datastore) GetByID(id string) (*Player, error) {
 	player := &Player{}
-	err := pdb.db.QueryRow(
-		"SELECT id, name FROM players WHERE id = ?",
+	err := d.db.QueryRow(
+		"SELECT name FROM players WHERE name = ?",
 		id,
-	).Scan(&player.Id, &player.Name)
+	).Scan(&player.Name)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -68,8 +71,8 @@ func (pdb *PlayerDB) GetByID(id string) (*Player, error) {
 }
 
 // GetAll retrieves all players from the database
-func (pdb *PlayerDB) GetAll() ([]*Player, error) {
-	rows, err := pdb.db.Query("SELECT id, name FROM players")
+func (d *Datastore) GetAll() ([]*Player, error) {
+	rows, err := d.db.Query("SELECT name FROM players")
 	if err != nil {
 		return nil, fmt.Errorf("error querying players: %v", err)
 	}
@@ -78,7 +81,7 @@ func (pdb *PlayerDB) GetAll() ([]*Player, error) {
 	var players []*Player
 	for rows.Next() {
 		player := &Player{}
-		err := rows.Scan(&player.Id, &player.Name)
+		err := rows.Scan(&player.Name)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning player: %v", err)
 		}
@@ -88,13 +91,13 @@ func (pdb *PlayerDB) GetAll() ([]*Player, error) {
 }
 
 // Close closes the database connection
-func (pdb *PlayerDB) Close() error {
-	return pdb.db.Close()
+func (d *Datastore) Close() error {
+	return d.db.Close()
 }
 
 func Example() {
 	// Create a new PlayerDB instance
-	playerDB, err := NewPlayerDB("./players.db")
+	playerDB, err := NewDatastore("./players.db")
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +105,6 @@ func Example() {
 
 	// Create a new player
 	player := &Player{
-		Id:   "player1",
 		Name: "John Doe",
 	}
 

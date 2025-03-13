@@ -7,21 +7,26 @@ import (
 
 var playersSchema string = `
 CREATE TABLE IF NOT EXISTS players (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL
+	name TEXT NOT NULL PRIMARY KEY
 )`
 
 var gamesSchema string = `
 CREATE TABLE IF NOT EXISTS games (
 	id TEXT PRIMARY KEY,
-	player_id TEXT NOT NULL REFERENCES players(id),
+	players TEXT NOT NULL, -- JSON array of player IDs
 	tries INTEGER NOT NULL,
 	duration INTEGER NOT NULL,
-	date TEXT NOT NULL
+	date TEXT NOT NULL,
+	won BOOLEAN NOT NULL
 )`
 
-// NewPlayerDB creates a new PlayerDB instance
-func NewPlayerDB(dbPath string) (*PlayerDB, error) {
+// Datastore handles database operations for players
+type Datastore struct {
+	db *sql.DB
+}
+
+// NewDatastore creates a new Datastore instance
+func NewDatastore(dbPath string) (*Datastore, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("error opening database: %v", err)
@@ -38,5 +43,5 @@ func NewPlayerDB(dbPath string) (*PlayerDB, error) {
 		return nil, fmt.Errorf("error creating table: %v", err)
 	}
 
-	return &PlayerDB{db: db}, nil
+	return &Datastore{db: db}, nil
 }
